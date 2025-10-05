@@ -1,0 +1,47 @@
+# Environment variables and secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Backups
+backups/
+*.tar.gz
+
+# CouchDB data
+data/
+
+# Logs
+*.log
+
+# JWT keys (if stored separately)
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+.cache/
