@@ -1,0 +1,16 @@
+[Unit]
+Description=Obsidian LiveSync Auth Proxy
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/obsidian-livesync/auth-proxy
+EnvironmentFile=/root/obsidian-livesync/.env
+ExecStart=/root/obsidian-livesync/auth-proxy/venv/bin/uvicorn main:app --host 127.0.0.1 --port 5985 --workers 2
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
