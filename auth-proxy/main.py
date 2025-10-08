@@ -13,7 +13,13 @@ import httpx
 from dotenv import load_dotenv
 from database import TokenDatabase
 
-load_dotenv("/root/obsidian-livesync/.env")
+# Load environment variables from configurable path
+ENV_FILE = os.getenv("ENV_FILE", "/root/obsidian-livesync/.env")
+if os.path.exists(ENV_FILE):
+    load_dotenv(ENV_FILE)
+else:
+    # Docker mode - ENV vars passed directly
+    pass
 
 app = FastAPI(
     title="Obsidian LiveSync Auth Proxy",
@@ -21,15 +27,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configuration
-COUCHDB_URL = os.getenv("COUCHDB_URL", "http://127.0.0.1:5984")
+# CORS is handled by CouchDB itself - do not process CORS here
+# The auth proxy must pass through CouchDB's CORS headers unchanged
+
+# Configuration from environment variables
+COUCHDB_HOST = os.getenv("COUCHDB_HOST", "127.0.0.1")
+COUCHDB_PORT = os.getenv("COUCHDB_PORT", "5984")
+COUCHDB_URL = os.getenv("COUCHDB_URL", f"http://{COUCHDB_HOST}:{COUCHDB_PORT}")
 COUCHDB_USER = os.getenv("COUCHDB_USER", "admin")
 COUCHDB_PASSWORD = os.getenv("COUCHDB_PASSWORD")
 JWT_SECRET = os.getenv("JWT_HMAC_SECRET")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")  # For management API
+TOKEN_DB_PATH = os.getenv("TOKEN_DB_PATH", "/root/obsidian-livesync/auth-proxy/tokens.db")
 
-# Database
-db = TokenDatabase()
+# Database with configurable path
+db = TokenDatabase(db_path=TOKEN_DB_PATH)
 
 # Security
 security = HTTPBearer()
@@ -48,9 +60,40 @@ async def health_check():
     return {"status": "healthy", "service": "obsidian-auth-proxy"}
 
 
-async def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """Verify JWT token and check if it's valid in database"""
-    token = credentials.credentials
+async def extract_and_verify_token(authorization: Optional[str] = Header(None)) -> dict:
+    """
+    Extract and verify JWT token from either:
+    1. Bearer token: Authorization: Bearer <jwt>
+    2. Basic Auth with JWT as password: Authorization: Basic base64(username:jwt)
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+
+    token = None
+
+    # Try Bearer authentication first
+    if authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "")
+
+    # Try Basic authentication with JWT as password
+    elif authorization.startswith("Basic "):
+        import base64
+        try:
+            # Decode Basic auth
+            credentials = base64.b64decode(authorization.replace("Basic ", "")).decode('utf-8')
+            # Split into username:password, password should be the JWT
+            parts = credentials.split(":", 1)
+            if len(parts) == 2:
+                token = parts[1]  # Password field contains JWT
+            else:
+                raise HTTPException(status_code=401, detail="Invalid Basic auth format")
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Invalid Basic auth: {str(e)}")
+    else:
+        raise HTTPException(status_code=401, detail="Authorization must be Bearer or Basic")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="No token found in authorization header")
 
     try:
         # Decode JWT
@@ -188,7 +231,7 @@ async def cleanup_expired_tokens(_admin: bool = Depends(verify_admin_token)):
 # ===== CouchDB Proxy (catch-all, must be LAST) =====
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
-async def proxy_to_couchdb(request: Request, path: str, payload: dict = Depends(verify_jwt_token)):
+async def proxy_to_couchdb(request: Request, path: str):
     """Proxy all requests to CouchDB after JWT validation"""
 
     # Build CouchDB URL
@@ -199,10 +242,39 @@ async def proxy_to_couchdb(request: Request, path: str, payload: dict = Depends(
     # Get request body
     body = await request.body()
 
-    # Prepare headers (exclude auth headers, we'll add our own)
+    # Prepare headers (exclude auth headers and transfer-encoding, we'll add our own)
     headers = dict(request.headers)
-    headers.pop("authorization", None)
     headers.pop("host", None)
+    headers.pop("transfer-encoding", None)  # Remove to avoid conflict with content-length
+
+    # For OPTIONS requests (CORS preflight), pass through directly to CouchDB
+    # Do NOT validate JWT for OPTIONS requests
+    if request.method == "OPTIONS":
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=request.method,
+                url=couchdb_url,
+                content=body,
+                headers=headers,
+                auth=(COUCHDB_USER, COUCHDB_PASSWORD),
+                timeout=300.0
+            )
+
+        response_headers = dict(response.headers)
+        response_headers.pop("transfer-encoding", None)
+
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=response_headers,
+            media_type=response.headers.get("content-type")
+        )
+
+    # For all other requests, validate JWT
+    payload = await extract_and_verify_token(authorization=headers.get("authorization"))
+
+    # Remove authorization header before proxying to CouchDB
+    headers.pop("authorization", None)
 
     # Make async request to CouchDB with Basic Auth
     async with httpx.AsyncClient() as client:
@@ -215,21 +287,31 @@ async def proxy_to_couchdb(request: Request, path: str, payload: dict = Depends(
             timeout=300.0  # 5 minutes for large sync operations
         )
 
+    # Prepare response headers, removing transfer-encoding to avoid conflicts
+    response_headers = dict(response.headers)
+    response_headers.pop("transfer-encoding", None)
+
     # Return CouchDB response
     return Response(
         content=response.content,
         status_code=response.status_code,
-        headers=dict(response.headers),
+        headers=response_headers,
         media_type=response.headers.get("content-type")
     )
 
 
 if __name__ == "__main__":
     import uvicorn
+
+    # Configurable host and port for Docker
+    HOST = os.getenv("AUTH_PROXY_HOST", "127.0.0.1")
+    PORT = int(os.getenv("AUTH_PROXY_PORT", "5985"))
+    LOG_LEVEL = os.getenv("LOG_LEVEL", "info")
+
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",
-        port=5985,
+        host=HOST,
+        port=PORT,
         reload=False,
-        log_level="info"
+        log_level=LOG_LEVEL
     )

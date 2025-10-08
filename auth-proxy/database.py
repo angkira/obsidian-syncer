@@ -1,6 +1,7 @@
 """
 Async SQLite database for device token management
 """
+import os
 import aiosqlite
 import secrets
 from datetime import datetime, timedelta
@@ -9,7 +10,10 @@ from pathlib import Path
 
 
 class TokenDatabase:
-    def __init__(self, db_path: str = "/root/obsidian-livesync/auth-proxy/tokens.db"):
+    def __init__(self, db_path: str = None):
+        # Use environment variable or fallback to default
+        if db_path is None:
+            db_path = os.getenv("TOKEN_DB_PATH", "/root/obsidian-livesync/auth-proxy/tokens.db")
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 

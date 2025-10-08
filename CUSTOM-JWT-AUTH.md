@@ -32,7 +32,24 @@ CouchDB (Port 5984)
 
 ## Quick Start
 
-### Create a Token
+### Option 1: Auto-Setup with Setup URI (Recommended)
+
+Generate a setup URI that auto-configures everything in Obsidian:
+
+```bash
+# Generate setup URI for a device
+obsidian-setup "iPhone"
+
+# The command will:
+# - Create a JWT token for the device
+# - Generate an E2EE encryption passphrase
+# - Create an encrypted setup URI
+# - Display everything you need
+```
+
+Copy the `obsidian://setuplivesync?settings=...` URI and open it in Obsidian to auto-configure!
+
+### Option 2: Manual Token Creation
 
 ```bash
 # Create token for a device (never expires)
@@ -91,7 +108,7 @@ After creating a token, configure Obsidian LiveSync:
 
 1. **Install Self-hosted LiveSync plugin**
 2. **Configure Remote Database:**
-   - **URL:** `http://37.27.209.193/obsidian`
+   - **URL:** `https://obsidian.your-domain.com/obsidian`
    - **Database:** `obsidian-sync`
    - **Username:** Leave empty
    - **Password:** Leave empty
@@ -99,7 +116,7 @@ After creating a token, configure Obsidian LiveSync:
 
 **Example:**
 ```
-URL: http://37.27.209.193/obsidian
+URL: https://obsidian.your-domain.com/obsidian
 Database: obsidian-sync
 Custom Request Header: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl9pZCI6InVwSklrQ2dPSUJ5T1YzclVTS2xMNjA3Q0tnbHd4b0o0OUJyeW5mYkJIeWMiLCJkZXZpY2VfbmFtZSI6IlRlc3QtRGV2aWNlIiwiaWF0IjoxNzU5NjgyMzM1LCJleHAiOjE3NjIyNzQzMzV9.JLBEDy05sONbqPaIymo2nuSUDPLvuRWY7Wp1NQrjXQk
 ```
@@ -112,6 +129,10 @@ Custom Request Header: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl9pZ
 ## CLI Commands Reference
 
 ```bash
+# Setup URI (Easiest)
+obsidian-setup <device-name> [e2ee-passphrase] # Generate auto-setup URI
+
+# Token Management
 obsidian-tokens create <device-name> [days]    # Create new token
 obsidian-tokens list [--all]                   # List tokens
 obsidian-tokens info <token-id>                # Get token details

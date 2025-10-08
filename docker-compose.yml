@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # CouchDB Database
   couchdb:
     image: couchdb:3.5
     container_name: obsidian-couchdb
@@ -11,11 +12,10 @@ services:
       - COUCHDB_SECRET=${COUCHDB_SECRET}
       - COUCHDB_JWT_AUTH_SECRET=${JWT_HMAC_SECRET}
     volumes:
-      - ./data:/opt/couchdb/data
-      - ./local.ini:/opt/couchdb/etc/local.ini
-      - ./backups:/backups
-    ports:
-      - "127.0.0.1:5984:5984"
+      - couchdb-data:/opt/couchdb/data
+      - couchdb-config:/opt/couchdb/etc/local.d
+      - ./couchdb/local.ini.template:/tmp/local.ini.template:ro
+      - backups:/backups
     networks:
       - obsidian-net
     healthcheck:
@@ -25,6 +25,85 @@ services:
       retries: 3
       start_period: 40s
 
+  # JWT Authentication Proxy
+  auth-proxy:
+    build:
+      context: ./auth-proxy
+      dockerfile: Dockerfile
+    container_name: obsidian-auth
+    restart: unless-stopped
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      - COUCHDB_HOST=couchdb
+      - COUCHDB_PORT=5984
+      - COUCHDB_USER=${COUCHDB_USER}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
+      - JWT_HMAC_SECRET=${JWT_HMAC_SECRET}
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - AUTH_PROXY_HOST=0.0.0.0
+      - AUTH_PROXY_PORT=5985
+      - TOKEN_DB_PATH=/app/tokens/tokens.db
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - tokens-db:/app/tokens
+    networks:
+      - obsidian-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5985/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # nginx Reverse Proxy with SSL
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: obsidian-nginx
+    restart: unless-stopped
+    depends_on:
+      auth-proxy:
+        condition: service_healthy
+    environment:
+      - DOMAIN=${DOMAIN}
+      - AUTH_PROXY_PORT=5985
+      - SSL_METHOD=${SSL_METHOD:-letsencrypt}
+      - SSL_EMAIL=${SSL_EMAIL}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+      - certbot-certs:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+      - nginx-logs:/var/log/nginx
+    networks:
+      - obsidian-net
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   obsidian-net:
     driver: bridge
+
+volumes:
+  couchdb-data:
+    driver: local
+  couchdb-config:
+    driver: local
+  tokens-db:
+    driver: local
+  backups:
+    driver: local
+  certbot-certs:
+    driver: local
+  certbot-www:
+    driver: local
+  nginx-logs:
+    driver: local

@@ -45,3 +45,22 @@ Thumbs.db
 # Temporary files
 *.tmp
 .cache/
+
+# Docker
+volumes/
+docker-compose.override.yml
+docker-compose.old.yml
+
+# SSL certificates
+*.crt
+*.key
+letsencrypt/
+
+# Old/deprecated files with sensitive data
+generate-jwt.sh
+generate-jwt.py
+JWT-*.md
+local.ini
+README-OLD-DELETE.md
+CUSTOM-JWT-AUTH.md
+SETUP-INSTRUCTIONS.md

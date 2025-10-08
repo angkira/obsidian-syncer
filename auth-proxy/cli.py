@@ -1,4 +1,4 @@
-#!/root/obsidian-livesync/auth-proxy/.venv/bin/python3
+#!/usr/bin/env python3
 """
 CLI tool for managing Obsidian LiveSync device tokens
 """
@@ -9,13 +9,23 @@ from dotenv import load_dotenv
 import json
 from datetime import datetime
 
-load_dotenv("/root/obsidian-livesync/.env")
+# Load environment variables from configurable path
+ENV_FILE = os.getenv("ENV_FILE", "/root/obsidian-livesync/.env")
+if os.path.exists(ENV_FILE):
+    load_dotenv(ENV_FILE)
+else:
+    # Docker mode - ENV vars passed directly
+    pass
 
-API_BASE = "http://127.0.0.1:5985/admin"
+# Configurable API endpoint
+AUTH_PROXY_HOST = os.getenv("AUTH_PROXY_HOST", "127.0.0.1")
+AUTH_PROXY_PORT = os.getenv("AUTH_PROXY_PORT", "5985")
+API_BASE = os.getenv("API_BASE", f"http://{AUTH_PROXY_HOST}:{AUTH_PROXY_PORT}/admin")
+
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
 
 if not ADMIN_TOKEN:
-    print("❌ ERROR: ADMIN_TOKEN not found in .env file")
+    print("❌ ERROR: ADMIN_TOKEN not found in environment variables")
     sys.exit(1)
 
 HEADERS = {
@@ -43,7 +53,8 @@ def create_token(device_name: str, expires_in_days: int = None):
         print(f"\n🎫 JWT Token:")
         print(f"{data['jwt_token']}")
         print(f"\n📋 Usage in Obsidian:")
-        print(f"Authorization Header: Bearer {data['jwt_token']}")
+        print(f"  - Username: obsidian")
+        print(f"  - Password: {data['jwt_token']}")
         print(f"\n💾 Save this token - it won't be shown again!")
     else:
         print(f"❌ Error: {response.status_code}")

@@ -1,0 +1,45 @@
+[couchdb]
+single_node=true
+max_document_size = ${COUCHDB_MAX_DOCUMENT_SIZE}
+
+[chttpd]
+require_valid_user = true
+max_http_request_size = ${COUCHDB_MAX_HTTP_REQUEST_SIZE}
+enable_cors = true
+bind_address = 0.0.0.0
+port = 5984
+
+[httpd]
+WWW-Authenticate = Basic realm="couchdb"
+enable_cors = true
+bind_address = 0.0.0.0
+
+[cors]
+origins = *
+credentials = true
+methods = GET, PUT, POST, HEAD, DELETE
+headers = accept, authorization, content-type, origin, referer
+
+[couch_httpd_auth]
+require_valid_user = true
+authentication_redirect = /_utils/session.html
+
+[chttpd_auth]
+require_valid_user = true
+authentication_redirect = /_utils/session.html
+timeout = 86400
+authentication_handlers = {chttpd_auth, cookie_authentication_handler}, {chttpd_auth, jwt_authentication_handler}, {chttpd_auth, default_authentication_handler}
+
+[jwt_auth]
+required_claims = exp,sub
+
+[jwt_keys]
+# JWT secret will be set via COUCHDB_JWT_AUTH_SECRET environment variable
+# This section is kept for reference but the actual key is set via env
+
+[admins]
+# Admin credentials are set via COUCHDB_USER and COUCHDB_PASSWORD environment variables
+
+[cluster]
+q=8
+n=1

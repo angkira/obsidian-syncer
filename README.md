@@ -1,349 +1,422 @@
-# Obsidian LiveSync Server - Deployment Summary
+# 🔄 Obsidian LiveSync Server
 
-## 🎉 Installation Complete!
+Self-hosted synchronization server for [Obsidian LiveSync](https://github.com/vrtmrz/obsidian-livesync) with JWT-based per-device authentication.
 
-Your Obsidian LiveSync server is running and ready to use.
+## ✨ Features
 
----
+- **🔐 JWT Per-Device Authentication** - Generate unique tokens for each device, revoke individually
+- **🔒 End-to-End Encryption** - Data encrypted client-side before sync
+- **🐳 Docker Deployment** - Easy setup with Docker Compose
+- **🔑 Automatic SSL** - Let's Encrypt integration with auto-renewal
+- **📱 One-Click Device Setup** - Generate encrypted setup URIs for instant configuration
+- **💾 Automatic Backups** - Scheduled CouchDB backups
+- **📊 Token Management** - CLI tools for device management
+- **⚡ High Performance** - Async Python proxy with connection pooling
 
-## 📋 Server Information
+## 📋 Prerequisites
 
-**VPS IP Address:** `37.27.209.193`
-**Installation Directory:** `/root/obsidian-livesync`
-**CouchDB Version:** 3.4.3
-**Access URL:** `http://37.27.209.193/obsidian`
+- **Docker** & **Docker Compose**
+- **Domain name** pointing to your server
+- **Ports 80 and 443** open for HTTPS
 
----
+## 🚀 Quick Start
 
-## 🔐 Credentials
-
-### Admin User (CouchDB Management)
-- **Username:** `admin`
-- **Password:** `r5IIX2rVz3dGCvTNSQH8W5ocwiDVCUC7t1tXEMWUTk0=`
-
-### Sync User (Obsidian Plugin)
-- **Username:** `obsidian`
-- **Password:** `nzQWlmuIHuhfflUIDeYKp4lQZKGWhgWKo+vctFNlwjI=`
-- **Database:** `obsidian-sync`
-
----
-
-## ⚠️ SECURITY WARNING
-
-**Your server is currently using HTTP (unencrypted) over the public internet!**
-
-Since you don't have a domain name, SSL/TLS cannot be configured. This means your sync traffic is **not encrypted** when transmitted over the internet.
-
-### Recommended Solution: SSH Tunnel
-
-For secure access, use an SSH tunnel from your client devices:
+### 1. Clone Repository
 
 ```bash
-# Run this on your local machine (laptop/desktop)
-ssh -L 5984:localhost:5984 root@37.27.209.193
-
-# Then configure Obsidian to connect to:
-# http://localhost:5984/obsidian-sync
+git clone https://github.com/angkira/obsidian-livesync-server.git
+cd obsidian-livesync-server
 ```
 
-This encrypts all sync traffic through SSH.
+### 2. Deploy
 
-### Alternative: VPN or Tailscale
-Consider setting up a VPN (WireGuard, Tailscale) for secure access without SSH tunnels.
+```bash
+./deploy.sh
+```
 
----
+The script will:
+- Ask for your domain and email
+- Generate all secrets automatically
+- Build Docker images
+- Start services
+- Initialize CouchDB
+- Setup SSL certificates (Let's Encrypt)
 
-## 🔧 Obsidian LiveSync Plugin Configuration
+### 3. Create Device Token
 
-1. **Install the Plugin:**
-   - Open Obsidian → Settings → Community Plugins
-   - Search for "Self-hosted LiveSync"
-   - Install and enable it
+```bash
+make setup-device DEVICE="MyPhone"
+```
 
-2. **Configure Remote Database:**
-   - Go to Plugin Settings → Remote Database Configuration
-   - **URI:** `http://37.27.209.193/obsidian`
-     (or `http://localhost:5984/obsidian-sync` if using SSH tunnel)
-   - **Username:** `obsidian`
-   - **Password:** `nzQWlmuIHuhfflUIDeYKp4lQZKGWhgWKo+vctFNlwjI=`
-   - **Database name:** `obsidian-sync`
-   - Click "Test Connection" → should see "Connection successful"
+This generates a JWT token for your device.
 
-3. **Initial Setup:**
-   - Choose sync settings (Live Sync recommended)
-   - Perform initial sync
-   - Enable on all your devices
+### 4. Configure Obsidian
 
----
+**In Obsidian LiveSync Settings:**
+
+1. **Remote Database Configuration:**
+   - URI: `https://your-domain.com/obsidian`
+   - Database name: `obsidian-sync`
+   - Username: `obsidian`
+   - Password: `<paste-your-jwt-token>`
+   - End to end encryption: (leave empty for now)
+
+2. **Encryption Settings (Recommended):**
+   - Enable End-to-End Encryption
+   - Set a strong passphrase (same on all devices)
+   - Enable Path Obfuscation
+
+3. **Done!** Start syncing
+
+**Note:** The JWT token goes in the **Password** field, NOT in Custom Request Header. The auth proxy will validate it as Basic Auth.
+
+## 🎯 Alternative: Manual Setup
+
+If you prefer manual configuration:
+
+### 1. Copy and Configure .env
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Set your `DOMAIN`, `SSL_EMAIL`, and other values.
+
+### 2. Generate Secrets
+
+```bash
+./scripts/generate-secrets.sh >> .env
+```
+
+### 3. Start Services
+
+```bash
+docker-compose -f docker-compose.yml up -d
+```
+
+### 4. Initialize CouchDB
+
+```bash
+./scripts/init-couchdb.sh
+```
+
+### 5. Setup SSL
+
+```bash
+./scripts/setup-ssl.sh your-domain.com your@email.com
+```
 
 ## 🛠️ Management Commands
 
-### Docker Management
+### Using Makefile (Recommended)
+
 ```bash
-# Navigate to installation directory
-cd /root/obsidian-livesync
-
-# View running containers
-docker ps
-
-# View CouchDB logs
-docker logs obsidian-couchdb
-
-# Follow logs in real-time
-docker logs -f obsidian-couchdb
-
-# Restart CouchDB
-docker compose restart
-
-# Stop CouchDB
-docker compose down
-
-# Start CouchDB
-docker compose up -d
-
-# Rebuild and restart (after config changes)
-docker compose down && docker compose up -d
+make help              # Show all commands
+make start             # Start services
+make stop              # Stop services
+make restart           # Restart services
+make logs              # View logs
+make status            # Show service status
+make setup-device DEVICE="iPhone"  # Setup new device
+make list-devices      # List all devices
+make backup            # Backup database
+make ssl-renew         # Renew SSL certificates
 ```
 
-### Nginx Management
+### Using Docker Directly
+
 ```bash
-# Test Nginx configuration
-nginx -t
+# Setup device
+docker exec obsidian-auth python3 setup_uri.py "MyPhone"
 
-# Reload Nginx (after config changes)
-systemctl reload nginx
+# List devices
+docker exec obsidian-auth python3 cli.py list
 
-# Restart Nginx
-systemctl restart nginx
+# Revoke device
+docker exec obsidian-auth python3 cli.py revoke <token-id>
 
-# Check Nginx status
-systemctl status nginx
+# View logs
+docker-compose -f docker-compose.yml logs -f
 
-# View Obsidian access logs
-tail -f /var/log/nginx/obsidian-access.log
-
-# View Obsidian error logs
-tail -f /var/log/nginx/obsidian-error.log
+# Backup
+docker exec obsidian-couchdb /app/scripts/backup.sh
 ```
 
-### Firewall Management
-```bash
-# Check UFW status
-ufw status verbose
+## 📱 Device Management
 
-# Add new rule (example)
-ufw allow 8080/tcp
+### Create Device Token
+
+```bash
+make setup-device DEVICE="MyLaptop"
 ```
 
-### Fail2ban Management
-```bash
-# Check fail2ban status
-fail2ban-client status
+Outputs:
+```
+✅ Token created for device: MyLaptop
 
-# Check Obsidian jail status
-fail2ban-client status nginx-obsidian
+📱 Device Name: MyLaptop
+🔑 Token ID: actNnsfSJO2KLMJdzhSt0Wu12qXGeERH...
+📅 Created: 2025-10-06T18:25:12
+⏰ Expires: Never
 
-# Unban an IP
-fail2ban-client set nginx-obsidian unbanip <IP_ADDRESS>
+🎫 JWT Token:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl9pZCI6ImFjdE5uc2...
+
+📋 Usage in Obsidian:
+  - Username: obsidian
+  - Password: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+💾 Save this token - it won't be shown again!
 ```
 
----
+**Then configure Obsidian:**
+- Settings → Community Plugins → Self-hosted LiveSync
+- Remote Database Configuration
+  - **Username:** `obsidian`
+  - **Password:** `<paste-your-jwt-token>`
+
+### List All Devices
+
+```bash
+make list-devices
+```
+
+### Revoke Device
+
+Lost your phone? Revoke access instantly:
+
+```bash
+docker exec obsidian-auth python3 cli.py revoke <token-id>
+```
+
+## 🔒 SSL/HTTPS Setup
+
+### Option 1: Let's Encrypt (Automatic)
+
+Set in `.env`:
+```bash
+SSL_METHOD=letsencrypt
+DOMAIN=obsidian.example.com
+SSL_EMAIL=admin@example.com
+```
+
+Certificates auto-renew every 12 hours.
+
+### Option 2: Manual Certificates
+
+1. Set `SSL_METHOD=manual` in `.env`
+2. Mount certificates:
+   ```yaml
+   volumes:
+     - /path/to/fullchain.pem:/etc/letsencrypt/live/${DOMAIN}/fullchain.pem:ro
+     - /path/to/privkey.pem:/etc/letsencrypt/live/${DOMAIN}/privkey.pem:ro
+   ```
+
+### Option 3: HTTP Only (Development)
+
+Set `SSL_METHOD=none` in `.env`
+
+⚠️ **Not recommended for production!**
+
+## 🚀 Advanced: Automatic Setup URI (Optional)
+
+For advanced users who want one-click device configuration, the system can generate encrypted setup URIs:
+
+```bash
+# Generate setup URI with encryption
+docker exec obsidian-auth python3 setup_uri.py "MyPhone"
+```
+
+This creates an `obsidian://setuplivesync?settings=...` URI that:
+- Auto-configures all Obsidian settings
+- Includes JWT token
+- Sets up E2EE encryption
+- Enables path obfuscation
+
+**Note:** This requires reverse-engineering the Obsidian LiveSync setup URI format. For most users, **manual token setup is simpler and recommended**.
+
+## 🏗️ Architecture
+
+```
+                         ┌─────────────┐
+                         │   Clients   │
+                         │  (Obsidian) │
+                         └──────┬──────┘
+                                │ HTTPS (443)
+                         ┌──────▼──────┐
+                         │    nginx    │
+                         │  (SSL Term) │
+                         └──────┬──────┘
+                                │ HTTP (internal)
+                    ┌───────────┴───────────┐
+                    │                       │
+             ┌──────▼──────┐        ┌──────▼────────┐
+             │ Auth Proxy  │───────▶│   CouchDB     │
+             │  (FastAPI)  │        │ (Database)    │
+             │  JWT Auth   │        │               │
+             └─────────────┘        └───────────────┘
+                    │
+             ┌──────▼──────┐
+             │  Token DB   │
+             │  (SQLite)   │
+             └─────────────┘
+```
+
+## 🔐 Security Features
+
+- ✅ **HTTPS** - TLS 1.2/1.3 encryption in transit
+- ✅ **JWT Authentication** - Per-device tokens with revocation
+- ✅ **End-to-End Encryption** - AES-256-GCM client-side encryption
+- ✅ **Path Obfuscation** - Encrypted file paths
+- ✅ **Rate Limiting** - 10 req/s with burst protection
+- ✅ **Security Headers** - HSTS, XSS Protection, etc.
+- ✅ **Automatic Updates** - Pull latest images easily
 
 ## 💾 Backup & Restore
 
 ### Automatic Backups
-- **Schedule:** Daily at 2:00 AM (server time)
-- **Location:** `/root/obsidian-livesync/backups/`
-- **Retention:** Last 14 backups kept automatically
-- **Log:** `/root/obsidian-livesync/backups/backup.log`
+
+Backups run automatically. Configure in `.env`:
+
+```bash
+MAX_BACKUPS=14              # Keep 14 days
+BACKUP_SCHEDULE=0 2 * * *   # Daily at 2 AM
+```
 
 ### Manual Backup
-```bash
-# Run backup script manually
-/root/obsidian-livesync/backup.sh
-
-# List all backups
-ls -lh /root/obsidian-livesync/backups/couchdb_backup_*.tar.gz
-
-# Check backup log
-tail -20 /root/obsidian-livesync/backups/backup.log
-```
-
-### Restore from Backup
-```bash
-# 1. Stop CouchDB
-cd /root/obsidian-livesync
-docker compose down
-
-# 2. Backup current data (optional)
-mv data data.old
-
-# 3. Extract backup (replace with your backup filename)
-tar -xzf backups/couchdb_backup_YYYYMMDD_HHMMSS.tar.gz
-
-# 4. Start CouchDB
-docker compose up -d
-
-# 5. Verify restoration
-docker logs obsidian-couchdb
-```
-
----
-
-## 📊 Monitoring
-
-### Check System Health
-```bash
-# CouchDB health check
-curl http://admin:r5IIX2rVz3dGCvTNSQH8W5ocwiDVCUC7t1tXEMWUTk0=@localhost:5984/_up
-
-# List all databases
-curl -u admin:r5IIX2rVz3dGCvTNSQH8W5ocwiDVCUC7t1tXEMWUTk0= http://localhost:5984/_all_dbs
-
-# Check database info
-curl -u admin:r5IIX2rVz3dGCvTNSQH8W5ocwiDVCUC7t1tXEMWUTk0= http://localhost:5984/obsidian-sync
-
-# Test via Nginx (from external)
-curl -u obsidian:nzQWlmuIHuhfflUIDeYKp4lQZKGWhgWKo+vctFNlwjI= http://37.27.209.193/obsidian/
-```
-
-### Disk Usage
-```bash
-# Check data directory size
-du -sh /root/obsidian-livesync/data
-
-# Check backup directory size
-du -sh /root/obsidian-livesync/backups
-
-# Overall system disk usage
-df -h
-```
-
----
-
-## 🔒 Security Features Deployed
-
-✅ **CouchDB bound to localhost only** (127.0.0.1:5984)
-✅ **Nginx reverse proxy** with rate limiting (10 req/sec)
-✅ **Authentication required** for all CouchDB access
-✅ **fail2ban** active (bans IPs after 5 failed attempts in 10 min)
-✅ **UFW firewall** enabled (ports 22, 80, 4243 allowed)
-✅ **Security headers** (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection)
-✅ **CORS configured** for Obsidian client compatibility
-✅ **Automated daily backups** with 14-day retention
-
----
-
-## 🚀 Architecture
-
-```
-Internet → Nginx (Port 80) → CouchDB (localhost:5984)
-           ↓
-       Rate Limiting
-       fail2ban
-       Security Headers
-```
-
-**Existing Services:**
-- WireGuard Dashboard on port 4243 (SSL) - unchanged
-- Obsidian LiveSync on port 80 at `/obsidian` path
-
----
-
-## 📁 File Locations
-
-| Component | Location |
-|-----------|----------|
-| Docker Compose | `/root/obsidian-livesync/docker-compose.yml` |
-| Environment File | `/root/obsidian-livesync/.env` |
-| CouchDB Config | `/root/obsidian-livesync/local.ini` |
-| Data Directory | `/root/obsidian-livesync/data` |
-| Backup Directory | `/root/obsidian-livesync/backups` |
-| Backup Script | `/root/obsidian-livesync/backup.sh` |
-| Nginx Config | `/etc/nginx/sites-available/obsidian-livesync` |
-| fail2ban Jail | `/etc/fail2ban/jail.d/nginx-obsidian.conf` |
-| fail2ban Filter | `/etc/fail2ban/filter.d/nginx-obsidian.conf` |
-
----
-
-## 🆘 Troubleshooting
-
-### Connection Issues
-1. Check CouchDB is running: `docker ps | grep obsidian`
-2. Check Nginx is running: `systemctl status nginx`
-3. Test local CouchDB: `curl http://localhost:5984/`
-4. Check firewall: `ufw status`
-5. Review logs: `docker logs obsidian-couchdb`
-
-### Sync Problems in Obsidian
-1. Verify credentials match exactly
-2. Check database name is `obsidian-sync`
-3. Test connection in plugin settings
-4. Check Nginx logs: `tail /var/log/nginx/obsidian-error.log`
-5. Ensure no firewall blocking from client side
-
-### Performance Issues
-1. Check disk space: `df -h`
-2. Check data size: `du -sh /root/obsidian-livesync/data`
-3. Review CouchDB logs for errors
-4. Consider increasing rate limits in Nginx config
-
----
-
-## 🔐 JWT Authentication
-
-**CouchDB Version:** 3.5.0 (upgraded from 3.4)
-**JWT Status:** ⚠️ Configured but NOT Working
-
-JWT authentication has been fully configured according to official CouchDB 3.5 documentation. The `jwtf` module is installed, configuration is correct, and tokens are properly signed, but CouchDB is not accepting JWT tokens for unknown reasons.
-
-**Current Working Authentication:** Basic Authentication (username + password)
-
-### JWT Documentation & Tools:
-- **Detailed Status Report:** `/root/obsidian-livesync/JWT-STATUS.md`
-- **Configuration Guide:** `/root/obsidian-livesync/JWT-AUTH-README.md`
-- **Token Generator (Python):** `/root/obsidian-livesync/generate-jwt.py`
-- **Token Generator (Bash):** `/root/obsidian-livesync/generate-jwt.sh`
-
-### JWT Configuration Summary:
-```ini
-[chttpd_auth]
-authentication_handlers = {chttpd_auth, cookie_authentication_handler}, {chttpd_auth, jwt_authentication_handler}, {chttpd_auth, default_authentication_handler}
-
-[jwt_auth]
-required_claims = exp,sub
-
-[jwt_keys]
-hmac:_default = pHhkegdm+1rsKx3NjgRMcJkkmTBWeQsEJSD1/LKt78R694lV4Gm6G0B7gktL+YuswpjrwAglQPXDpzBQo3CR/Q==
-```
-
-All configuration is in place and tokens generate correctly, but authentication fails. See JWT-STATUS.md for detailed analysis and troubleshooting steps.
-
-## 📞 Support Resources
-
-- **Obsidian LiveSync Plugin:** [GitHub](https://github.com/vrtmrz/obsidian-livesync)
-- **CouchDB Docs:** [https://docs.couchdb.org/](https://docs.couchdb.org/)
-- **Nginx Docs:** [https://nginx.org/en/docs/](https://nginx.org/en/docs/)
-- **CouchDB JWT Plugin:** [GitHub](https://github.com/softapalvelin/couch_jwt_auth)
-
----
-
-## 🔄 Upgrading CouchDB
 
 ```bash
-cd /root/obsidian-livesync
-
-# Pull latest CouchDB image
-docker compose pull
-
-# Recreate container with new image
-docker compose up -d
-
-# Verify upgrade
-docker logs obsidian-couchdb
+make backup
 ```
+
+Backups stored in Docker volume `backups`.
+
+### Restore
+
+```bash
+# Extract backup
+docker exec obsidian-couchdb tar -xzf /backups/couchdb_backup_20251006.tar.gz -C /opt/couchdb
+
+# Restart CouchDB
+docker-compose -f docker-compose.yml restart couchdb
+```
+
+## 🔧 Troubleshooting
+
+### Services Won't Start
+
+```bash
+# Check logs
+make logs
+
+# Check service status
+make status
+
+# Restart services
+make restart
+```
+
+### SSL Certificate Issues
+
+```bash
+# Check certificate
+docker exec obsidian-nginx ls -la /etc/letsencrypt/live/${DOMAIN}/
+
+# Manually request certificate
+docker exec obsidian-nginx certbot certonly --webroot \
+  -w /var/www/certbot -d your-domain.com \
+  --email your@email.com --agree-tos
+```
+
+### Can't Connect from Obsidian
+
+1. **Check DNS**: Ensure domain points to your server
+   ```bash
+   nslookup your-domain.com
+   ```
+
+2. **Check ports**: Verify 80/443 are open
+   ```bash
+   netstat -tuln | grep -E ':80|:443'
+   ```
+
+3. **Check services**:
+   ```bash
+   make status
+   ```
+
+4. **Check logs**:
+   ```bash
+   docker-compose -f docker-compose.yml logs nginx auth-proxy
+   ```
+
+### Authentication Failed
+
+1. **List tokens**: Verify token exists
+   ```bash
+   make list-devices
+   ```
+
+2. **Check token info**:
+   ```bash
+   docker exec obsidian-auth python3 cli.py info <token-id>
+   ```
+
+3. **Generate new token**: If revoked or expired
+   ```bash
+   make setup-device DEVICE="NewDevice"
+   ```
+
+## 📈 Upgrading
+
+### Update to Latest Version
+
+```bash
+git pull origin main
+docker-compose -f docker-compose.yml pull
+docker-compose -f docker-compose.yml up -d --build
+```
+
+### Migrating Data
+
+See [docs/MIGRATION.md](docs/MIGRATION.md) for detailed instructions.
+
+## 🌟 Environment Variables
+
+See [.env.example](.env.example) for full documentation.
+
+**Key Variables**:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DOMAIN` | Your domain name | `obsidian.example.com` |
+| `PUBLIC_URL` | Public HTTPS URL | `https://${DOMAIN}` |
+| `SSL_METHOD` | SSL method | `letsencrypt` |
+| `COUCHDB_USER` | CouchDB admin user | `admin` |
+| `DB_NAME` | Database name | `obsidian-sync` |
+| `JWT_HMAC_SECRET` | JWT signing secret | Auto-generated |
+| `ADMIN_TOKEN` | Admin API token | Auto-generated |
+
+## 🤝 Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE)
+
+## 🙏 Credits
+
+- [Obsidian LiveSync](https://github.com/vrtmrz/obsidian-livesync) by vrtmrz
+- [CouchDB](https://couchdb.apache.org/)
+- [FastAPI](https://fastapi.tiangolo.com/)
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/angkira/obsidian-livesync-server/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/angkira/obsidian-livesync-server/discussions)
 
 ---
 
-**Deployment Date:** 2025-10-05
-**Generated by:** Claude Code (Anthropic)
+**Made with ❤️ for the Obsidian community**
